@@ -43,6 +43,67 @@ export type EmptySlotReactComponentInternalMetadata = {
 };
 
 
-export type ReactComponentInternalMetadata = 
+export type ReactComponentInternalMetadata =
 	| RealElementReactComponentInternalMetadata
 	| EmptySlotReactComponentInternalMetadata;
+
+
+
+export type ReactRenderTreeNodeRealElement = {
+	kind: "real-element";
+	id: string;
+	childNodes: Array<ReactRenderTreeNode>;
+	computedViewTreeNodeId: string | null;
+	internalMetadata: ReactComponentInternalMetadata;
+	// hooks: Array<
+	// 	UseStateMetadata | UseRefMetadata | UseEffectMetadata | UseMemoMetadata
+	// >;
+	// | UseContextMetadata
+
+	indexPath: Array<number>;
+	hasRendered: boolean; // im confident we don't need ths and can just derive this from existing info on the trees
+	parent: ReactRenderTreeNode | null;
+};
+
+export type ReactRenderTreeNodeEmptySlot = {
+	kind: "empty-slot";
+	parent: ReactRenderTreeNode | null;
+};
+
+export type ReactRenderTreeNode = 
+	| ReactRenderTreeNodeRealElement
+	| ReactRenderTreeNodeEmptySlot
+
+
+export type ReactRenderTree = {
+	root: ReactRenderTreeNode;
+	currentlyRendering: ReactRenderTreeNode | null;
+	currentLocalHookOrder: number;
+}
+
+
+export type ReactViewTreeNodeRealElement = {
+	kind: "real-element";
+	id: string;
+	childNodes: Array<ReactViewTreeNode>;
+	metadata: ReactComponentInternalMetadata;
+	indexPath: Array<number>; // allows for optimized diffs to know what to map with
+	parent: ReactViewTreeNode | null;
+};
+
+
+export type ReactViewTreeNodeEmptySlot = {
+	kind: "empty-slot";
+	id: string;
+	parent: ReactViewTreeNode | null;
+};
+
+
+export type ReactViewTreeNode =
+	| ReactViewTreeNodeRealElement
+	| ReactViewTreeNodeEmptySlot;
+
+
+export type ReactViewTree = {
+	root: ReactViewTreeNode | null;
+};

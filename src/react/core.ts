@@ -2,7 +2,12 @@ import type {
 	AnyProps,
 	ReactComponentExternalMetadata,
 	ReactComponentInternalMetadata,
-	RealElementReactComponentInternalMetadata
+	RealElementReactComponentInternalMetadata,
+
+	ReactRenderTreeNode,
+	ReactRenderTree,
+	ReactViewTreeNode,
+	ReactViewTree,
 } from "./types";
 
 
@@ -18,7 +23,7 @@ function mapExternalMetadataToInternalMetadata({
 	externalMetadata
 }: {
 	externalMetadata: ReactComponentExternalMetadata<AnyProps>
-}): ReactComponentInternalMetadata {
+}): RealElementReactComponentInternalMetadata {
 	return {
 		// provider: null,
 		kind: "real-element",
@@ -48,7 +53,7 @@ export function createElement<T extends AnyProps>(
 	component: ReactComponentExternalMetadata<T>["component"],
 	props: T,
 	...children: Array<ReactComponentInternalMetadata | null | undefined | false>
-): ReactComponentInternalMetadata {
+): RealElementReactComponentInternalMetadata {
 	const internalMetadata = mapExternalMetadataToInternalMetadata({
 		externalMetadata: {
 			component,
@@ -60,3 +65,85 @@ export function createElement<T extends AnyProps>(
 	return internalMetadata
 }
 
+
+const currentTreeRef: {
+	viewTree: ReactViewTree | null,
+	renderTree: ReactRenderTree | null
+} = {
+	viewTree: null,
+	renderTree: null
+}
+
+
+function generateReactTrees(
+	renderNode: ReactRenderTreeNode,
+	parentViewNode: ReactViewTreeNode | null
+): { viewTree: ReactViewTreeNode } {
+
+}
+
+
+function buildReactTrees(
+	internalMetadata: RealElementReactComponentInternalMetadata
+): {
+	viewTree: ReactViewTree,
+	renderTree: ReactRenderTree
+} {
+
+	const rootRenderTreeNode: ReactRenderTreeNode = {
+		id: crypto.randomUUID(),
+		kind: "real-element",
+		childNodes: [],
+		computedViewTreeNodeId: null,
+		internalMetadata: {
+			id: crypto.randomUUID(),
+			kind: 'real-element',
+			component: {
+				kind: 'function',
+				function: () => internalMetadata,
+				name: 'root'
+			},
+			children: [],
+			props: {}
+		},
+		indexPath: [],
+		hasRendered: false,
+		parent: null
+	}
+
+	currentTreeRef.renderTree = {
+		root: rootRenderTreeNode,
+		currentLocalHookOrder: 0,
+		currentlyRendering: null
+	}
+
+	console.log('------Rendering Start------');
+
+	const { viewTree } = generateReactTrees(rootRenderTreeNode, null);
+
+	currentTreeRef.viewTree = {
+		root: viewTree
+	}
+
+	console.log('------Rendering End------');
+
+	return {
+		viewTree: currentTreeRef.viewTree,
+		renderTree: currentTreeRef.renderTree
+	}
+}
+
+
+
+export function render(
+	internalMetadata: ReturnType<typeof createElement>,
+	rootElement: HTMLElement
+) {
+	const { viewTree, renderTree } = buildReactTrees(internalMetadata);
+
+	console.log('viewTree ', viewTree);
+	console.log('renderTree ', renderTree);
+
+	console.log('root element ', rootElement)
+
+}
