@@ -55,11 +55,9 @@ export type ReactRenderTreeNodeRealElement = {
 	childNodes: Array<ReactRenderTreeNode>;
 	computedViewTreeNodeId: string | null;
 	internalMetadata: ReactComponentInternalMetadata;
-	// hooks: Array<
-	// 	UseStateMetadata | UseRefMetadata | UseEffectMetadata | UseMemoMetadata
-	// >;
-	// | UseContextMetadata
-
+	hooks: Array<
+		UseStateMetadata | UseRefMetadata | UseEffectMetadata | UseMemoMetadata | UseContextMetadata
+	>;
 	indexPath: Array<number>;
 	hasRendered: boolean; // im confident we don't need ths and can just derive this from existing info on the trees
 	parent: ReactRenderTreeNode | null;
@@ -106,4 +104,32 @@ export type ReactViewTreeNode =
 
 export type ReactViewTree = {
 	root: ReactViewTreeNode | null;
+};
+
+
+export type UseStateMetadata = {
+	kind: "state";
+	value: unknown;
+};
+
+export type UseEffectMetadata = {
+	kind: "effect";
+	deps: Array<unknown>;
+	cb: () => unknown;
+	cleanup: (() => void) | null;
+};
+export type UseRefMetadata = {
+	kind: "ref";
+	refTo: { current: unknown };
+};
+
+export type UseContextMetadata = {
+	kind: "context";
+	refTo: { current: unknown };
+};
+
+export type UseMemoMetadata = {
+	kind: "memo";
+	memoizedValue: unknown;
+	deps: Array<unknown>;
 };
