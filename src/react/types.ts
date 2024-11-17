@@ -30,7 +30,7 @@ export type FunctionalComponent = {
 export type RealElementReactComponentInternalMetadata = {
 	kind: "real-element";
 	component: TagComponent | FunctionalComponent;
-	// provider: null | Provider;
+	provider: null | Provider;
 	props: AnyProps;
 	children: Array<ReactComponentInternalMetadata>;
 	// hooks: Array<ReactHookMetadata>;
@@ -121,6 +121,11 @@ export type UseEffectMetadata = {
 export type UseRefMetadata = {
 	kind: "ref";
 	refTo: { current: unknown };
+};
+
+export type Provider = {
+	state: unknown;
+	contextId: string;
 };
 
 export type UseContextMetadata = {

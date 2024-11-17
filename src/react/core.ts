@@ -10,6 +10,8 @@ import type {
 	ReactViewTreeNode,
 	ReactViewTree,
 	ReactViewTreeNodeRealElement,
+
+	Provider
 } from "./types";
 
 import * as Utils from "../utils";
@@ -48,6 +50,7 @@ function mapExternalMetadataToInternalMetadata({
 				return child;
 			}
 		),
+		provider: null,
 		props: externalMetadata.props,
 		id: crypto.randomUUID(),
 	}
@@ -71,10 +74,111 @@ export function createElement<T extends AnyProps>(
 
 export const currentTreeRef: {
 	viewTree: ReactViewTree | null,
-	renderTree: ReactRenderTree | null
+	renderTree: ReactRenderTree | null,
+	defaultContextState: Array<Provider>,
+	tempViewNodes: Array<ReactViewTreeNode>,
 } = {
 	viewTree: null,
-	renderTree: null
+	renderTree: null,
+	defaultContextState: [],
+	tempViewNodes: []
+}
+
+export function searchForContextStateUpwards(
+	viewNode: ReactViewTreeNode,
+	ctxId: string
+) {
+	if (viewNode.parent === null) {
+		const defaultContext = currentTreeRef.defaultContextState.find(
+			(ctx) => ctx.contextId === ctxId
+		);
+		if (!defaultContext) {
+			throw new Error("Invalid ctxId, not created by createContext");
+		}
+
+		return defaultContext.state;
+	}
+	// console.log("searching up on", viewNode, ctxId);
+	if (viewNode.kind === "empty-slot") {
+		return searchForContextStateUpwards(viewNode.parent, ctxId);
+	}
+	if (viewNode.metadata.kind === "empty-slot") {
+		return searchForContextStateUpwards(viewNode.parent, ctxId);
+	}
+
+	if (viewNode.metadata.provider?.contextId === ctxId) {
+		return viewNode.metadata.provider.state;
+	}
+
+	return searchForContextStateUpwards(viewNode.parent, ctxId);
+};
+
+
+
+export function triggerReRender(
+	renderNode: ReactRenderTreeNodeRealElement
+) {
+	if (!currentTreeRef.renderTree) {
+		throw new Error('Cannot Re-Render node without render tree!');
+	}
+
+	if (!renderNode.computedViewTreeNodeId) {
+		throw new Error('Cannot Re-Render unmounted component');
+	}
+
+	if (!currentTreeRef.viewTree) {
+		throw new Error('Cannot Re-Render node without view tree!');
+	}
+
+	const existingParentViewNode = findParentViewNode(renderNode.computedViewTreeNodeId);
+
+	if (existingParentViewNode.kind === 'empty-slot') {
+		throw new Error('Invariant Error: Empty slot cannot have children');
+	}
+
+	const clonedParentViewNode = Utils.deepCloneTree(existingParentViewNode);
+
+	const previousViewTree = clonedParentViewNode.childNodes.find(
+		node => node.id === renderNode.computedViewTreeNodeId
+	);
+
+	console.log("\n\nRE-RENDER START----------------------------------------------");
+
+	const regeneratedViewTree = generateReactTreesHelper({
+		renderNode,
+		parentViewNode: clonedParentViewNode,
+		startingFromRenderNodeId: renderNode.id
+	});
+
+	console.log("\n\nRE-RENDER END----------------------------------------------");
+
+
+	const index = existingParentViewNode.childNodes.findIndex(
+		(node) =>
+			renderNode.internalMetadata.kind === "empty-slot" ||
+				node.kind === "empty-slot" ||
+				node.metadata.kind === "empty-slot"
+				? false
+				: renderNode.internalMetadata.id ===
+				node.metadata.id
+	);
+
+	if (index === -1 && renderNode.internalMetadata.kind !== "empty-slot") {
+		throw new Error('Invariant Error: View Node not found in parent view node');
+	}
+
+	if (
+		currentTreeRef.renderTree.root.kind === "empty-slot" &&
+		regeneratedViewTree
+	) {
+		throw new Error(
+			"Invariant Error: This implies an empty slot generated a not null view tree"
+		);
+	}
+
+	existingParentViewNode.childNodes[index] = regeneratedViewTree;
+	// TODO: update dom here
+
 }
 
 
@@ -289,6 +393,35 @@ function findExistingViewNodeOrThrow(
 	throw new Error('Invaraint Error: Already Rendered viewNode not found or wrong metadata Id');
 }
 
+function findParentViewNode(id: string): ReactViewTreeNode {
+	const aux = (viewNode: ReactViewTreeNode): ReactViewTreeNode | undefined => {
+		if (viewNode.kind === "empty-slot") {
+			return;
+		}
+		for (const node of viewNode.childNodes) {
+			if (node.id === id) {
+				return viewNode;
+			}
+
+			const res = aux(node);
+
+			if (res) {
+				return res;
+			}
+		}
+	};
+
+	if (currentTreeRef.viewTree?.root?.id === id) {
+		return currentTreeRef.viewTree.root;
+	}
+
+	const result = aux(currentTreeRef.viewTree?.root!);
+
+	if (!result) {
+		throw new Error("detached node or wrong id:" + id + "\n\n");
+	}
+	return result;
+};
 
 
 function findExistingRenderNode(
@@ -465,6 +598,7 @@ function generateReactTreesHelper({
 	}
 
 	renderNode.computedViewTreeNodeId = newViewNode.id;
+	currentTreeRef.tempViewNodes.push(newViewNode);
 
 	switch (renderNode.internalMetadata.component.kind) {
 		case 'function': {
@@ -710,6 +844,7 @@ function generateReactTrees(
 		// isEntryPoint: true,
 	})
 
+	currentTreeRef.tempViewNodes = [];
 
 	return newViewTree;
 }
@@ -736,9 +871,11 @@ function buildReactTrees(
 				name: 'root'
 			},
 			children: [],
-			props: {}
+			props: {},
+			provider: null
 		},
 		indexPath: [],
+		hooks: [],
 		hasRendered: false,
 		parent: null
 	}

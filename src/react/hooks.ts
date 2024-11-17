@@ -1,4 +1,5 @@
-import { currentTreeRef } from './core';
+import { currentTreeRef, createElement, searchForContextStateUpwards, triggerReRender } from './core';
+import type { ReactComponentInternalMetadata } from './types';
 
 
 export function useState<T>(initialValue: T) {
@@ -45,6 +46,8 @@ export function useState<T>(initialValue: T) {
 			}
 
 			existingHook.value = newValue;
+
+			triggerReRender(currentlyRenderingNode);
 
 			// TODO: Need to trigger re-render
 		}
@@ -116,8 +119,7 @@ export function useEffect(cb: () => unknown, deps: Array<unknown>) {
 
 	if (
 		deps.length !== existingHook.deps.length ||
-		!deps.every((dep, index) => dep === existingHook.deps[index]))
-	{
+		!deps.every((dep, index) => dep === existingHook.deps[index])) {
 		existingHook.cb = cb; // update callback so that callback closure has new values
 		existingHook.deps = deps;
 	}
@@ -155,7 +157,7 @@ export function useMemo<T>(fn: () => T, deps: Array<unknown>): T {
 	if (
 		deps.length !== existingHook.deps.length ||
 		!deps.every((dep, index) => dep === existingHook.deps[index])) {
-		existingHook.memoizedValue = fn(); 
+		existingHook.memoizedValue = fn();
 		existingHook.deps = deps;
 	}
 
@@ -166,3 +168,78 @@ export function useMemo<T>(fn: () => T, deps: Array<unknown>): T {
 export function useCallback<T>(cb: () => T, deps: Array<unknown>): () => T {
 	return useMemo(() => cb, deps);
 }
+
+
+export function createContext<T>(defaultValue: T) {
+	const contextId = crypto.randomUUID();
+
+	currentTreeRef.defaultContextState.push({
+		contextId,
+		state: defaultValue,
+	});
+
+	return {
+		Provider: (data: {
+			value: T;
+			children: Array<
+				ReactComponentInternalMetadata | null | false | undefined
+			>;
+		}) => {
+			if (
+				typeof data.value === "object" &&
+				data.value &&
+				"__internal-context" in data.value
+			) {
+				return contextId as unknown;
+			}
+
+			const el = createElement('div', {}, ...data.children);
+			if (!(el.kind === "real-element")) {
+				throw new Error();
+			}
+			el.provider = {
+				state: data.value,
+				contextId,
+			};
+			return el;
+		}
+	}
+}
+
+
+export function useContext<T>(context: ReturnType<typeof createContext<T>>) {
+	if (!currentTreeRef.renderTree) {
+		throw new Error('Cannot render component outside of renderTree');
+	}
+
+	const contextId = context.Provider({
+		value: {
+			"__internal-context": true,
+		},
+	} as any) as string;
+
+	const currentlyRenderingRenderNode =
+		currentTreeRef.renderTree.currentlyRendering;
+	
+	if (!currentlyRenderingRenderNode) {
+		throw new Error('Cannot call useContext outside of react component');
+	}
+
+	if (currentlyRenderingRenderNode.kind === "empty-slot") {
+		throw new Error(
+			"Invariant Error: A node that called use context cannot be an empty slot"
+		);
+	}
+
+	const computedViewNode = currentTreeRef.tempViewNodes.find(
+		(node) =>
+			node.id === currentlyRenderingRenderNode.computedViewTreeNodeId
+	)!;
+
+	const state = searchForContextStateUpwards(computedViewNode, contextId);
+
+	console.log("did we read it?", state);
+
+	return state as T;
+}
+
