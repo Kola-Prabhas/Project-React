@@ -2,40 +2,92 @@ import { currentTreeRef, createElement, searchForContextStateUpwards, triggerReR
 import type { ReactComponentInternalMetadata } from './types';
 
 
-export function useState<T>(initialValue: T) {
+// export function useState<T>(initialValue: T) {
+// 	if (!currentTreeRef.renderTree?.currentlyRendering) {
+// 		throw new Error('Cannot call useState outside of react component');
+// 	}
+
+// 	const currentlyRenderingNode = currentTreeRef.renderTree.currentlyRendering;
+// 	const currentHookOrder = currentTreeRef.renderTree.currentLocalHookOrder;
+
+// 	currentTreeRef.renderTree.currentLocalHookOrder += 1;
+
+// 	if (currentlyRenderingNode?.kind === 'empty-slot') {
+// 		throw new Error("Empty slot can't have state inside it!");
+// 	}
+
+// 	if (!currentlyRenderingNode?.hasRendered) {
+// 		currentlyRenderingNode.hooks.push({
+// 			kind: 'state',
+// 			value: initialValue
+// 		});
+
+// 		return;
+// 	}
+
+// 	const existingHook = currentlyRenderingNode.hooks[currentHookOrder];
+
+// 	if (existingHook.kind !== 'state') {
+// 		throw new Error('Invariant Error: Hook order mismatch');
+// 	}
+
+
+// 	return [
+// 		existingHook.value as T,
+// 		(newValue: T) => {
+// 			if (!currentlyRenderingNode.computedViewTreeNodeId) {
+// 				throw new Error(
+// 					"Invariant: set state trying to re-render unmounted component"
+// 				);
+// 			}
+
+// 			if (!currentTreeRef.viewTree || !currentTreeRef.renderTree) {
+// 				throw new Error("Invariant error, no view tree or no render tree");
+// 			}
+
+// 			existingHook.value = newValue;
+
+// 			triggerReRender(currentlyRenderingNode);
+// 		}
+// 	] as const;
+// }
+
+export const useState = <T>(initialValue: T) => {
 	if (!currentTreeRef.renderTree?.currentlyRendering) {
-		throw new Error('Cannot call useState outside of react component');
+		throw new Error("Cannot call use state outside of a react component");
 	}
 
-	const currentlyRenderingNode = currentTreeRef.renderTree.currentlyRendering;
-	const currentHookOrder = currentTreeRef.renderTree.currentLocalHookOrder;
-
+	const currentStateOrder =
+		currentTreeRef.renderTree.currentLocalHookOrder;
 	currentTreeRef.renderTree.currentLocalHookOrder += 1;
 
-	if (currentlyRenderingNode?.kind === 'empty-slot') {
-		throw new Error("Empty slot can't have state inside it!");
+	const capturedCurrentlyRenderingRenderNode =
+		currentTreeRef.renderTree.currentlyRendering;
+
+	if (capturedCurrentlyRenderingRenderNode.kind === "empty-slot") {
+		throw new Error(
+			"Invariant Error: A node that triggered a set state cannot be an empty slot"
+		);
 	}
 
-	if (!currentlyRenderingNode?.hasRendered) {
-		currentlyRenderingNode.hooks.push({
-			kind: 'state',
-			value: initialValue
+	if (!capturedCurrentlyRenderingRenderNode.hasRendered) {
+		capturedCurrentlyRenderingRenderNode.hooks.push({
+			kind: "state",
+			value: initialValue,
 		});
-
-		return;
 	}
 
-	const existingHook = currentlyRenderingNode.hooks[currentHookOrder];
+	const hookMetadata =
+		capturedCurrentlyRenderingRenderNode.hooks[currentStateOrder];
 
-	if (existingHook.kind !== 'state') {
-		throw new Error('Invariant Error: Hook order mismatch');
+	if (hookMetadata.kind !== "state") {
+		throw new Error("Different number of hooks rendered between render");
 	}
-
 
 	return [
-		existingHook.value as T,
-		(newValue: T) => {
-			if (!currentlyRenderingNode.computedViewTreeNodeId) {
+		hookMetadata.value as T,
+		(value: T) => {
+			if (!capturedCurrentlyRenderingRenderNode.computedViewTreeNodeId) {
 				throw new Error(
 					"Invariant: set state trying to re-render unmounted component"
 				);
@@ -45,14 +97,11 @@ export function useState<T>(initialValue: T) {
 				throw new Error("Invariant error, no view tree or no render tree");
 			}
 
-			existingHook.value = newValue;
-
-			triggerReRender(currentlyRenderingNode);
-
-			// TODO: Need to trigger re-render
-		}
+			hookMetadata.value = value;
+			triggerReRender(capturedCurrentlyRenderingRenderNode);
+		},
 	] as const;
-}
+};
 
 
 
