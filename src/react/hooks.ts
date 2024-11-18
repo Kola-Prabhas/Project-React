@@ -1,5 +1,5 @@
-// import { currentTreeRef, createElement, searchForContextStateUpwards, triggerReRender } from './core';
-// import type { ReactComponentInternalMetadata } from './types';
+import { currentTreeRef, createElement, searchForContextStateUpwards, triggerReRender } from './core';
+import type { ReactComponentInternalMetadata } from './types';
 
 
 // export function useState<T>(initialValue: T) {
@@ -52,243 +52,282 @@
 // 	] as const;
 // }
 
-// export const useState = <T>(initialValue: T) => {
-// 	if (!currentTreeRef.renderTree?.currentlyRendering) {
-// 		throw new Error("Cannot call use state outside of a react component");
-// 	}
+export const useState = <T>(initialValue: T) => {
+	if (!currentTreeRef.renderTree?.currentlyRendering) {
+		throw new Error("Cannot call use state outside of a react component");
+	}
 
-// 	const currentStateOrder =
-// 		currentTreeRef.renderTree.currentLocalHookOrder;
-// 	currentTreeRef.renderTree.currentLocalHookOrder += 1;
+	const currentStateOrder =
+		currentTreeRef.renderTree.currentLocalCurrentHookOrder;
+	currentTreeRef.renderTree.currentLocalCurrentHookOrder += 1;
 
-// 	const capturedCurrentlyRenderingRenderNode =
-// 		currentTreeRef.renderTree.currentlyRendering;
+	const capturedCurrentlyRenderingRenderNode =
+		currentTreeRef.renderTree.currentlyRendering;
 
-// 	if (capturedCurrentlyRenderingRenderNode.kind === "empty-slot") {
-// 		throw new Error(
-// 			"Invariant Error: A node that triggered a set state cannot be an empty slot"
-// 		);
-// 	}
+	if (capturedCurrentlyRenderingRenderNode.kind === "empty-slot") {
+		throw new Error(
+			"Invariant Error: A node that triggered a set state cannot be an empty slot"
+		);
+	}
 
-// 	if (!capturedCurrentlyRenderingRenderNode.hasRendered) {
-// 		capturedCurrentlyRenderingRenderNode.hooks.push({
-// 			kind: "state",
-// 			value: initialValue,
-// 		});
-// 	}
+	if (!capturedCurrentlyRenderingRenderNode.hasRendered) {
+		capturedCurrentlyRenderingRenderNode.hooks.push({
+			kind: "state",
+			value: initialValue,
+		});
+	}
 
-// 	const hookMetadata =
-// 		capturedCurrentlyRenderingRenderNode.hooks[currentStateOrder];
+	const hookMetadata =
+		capturedCurrentlyRenderingRenderNode.hooks[currentStateOrder];
 
-// 	if (hookMetadata.kind !== "state") {
-// 		throw new Error("Different number of hooks rendered between render");
-// 	}
+	if (hookMetadata.kind !== "state") {
+		throw new Error("Different number of hooks rendered between render");
+	}
 
-// 	return [
-// 		hookMetadata.value as T,
-// 		(value: T) => {
-// 			if (!capturedCurrentlyRenderingRenderNode.computedViewTreeNodeId) {
-// 				throw new Error(
-// 					"Invariant: set state trying to re-render unmounted component"
-// 				);
-// 			}
+	return [
+		hookMetadata.value as T,
+		(value: T) => {
+			if (!capturedCurrentlyRenderingRenderNode.computedViewTreeNodeId) {
+				throw new Error(
+					"Invariant: set state trying to re-render unmounted component"
+				);
+			}
 
-// 			if (!currentTreeRef.viewTree || !currentTreeRef.renderTree) {
-// 				throw new Error("Invariant error, no view tree or no render tree");
-// 			}
+			if (!currentTreeRef.viewTree || !currentTreeRef.renderTree) {
+				throw new Error("Invariant error, no view tree or no render tree");
+			}
 
-// 			hookMetadata.value = value;
-// 			triggerReRender(capturedCurrentlyRenderingRenderNode);
-// 		},
-// 	] as const;
-// };
-
-
-
-// export function useRef<T>(initialValue: T) {
-// 	if (!currentTreeRef.renderTree?.currentlyRendering) {
-// 		throw new Error('Cannot call useRef outside of react component');
-// 	}
-
-// 	const currentlyRenderingNode = currentTreeRef.renderTree.currentlyRendering;
-// 	const currentHookOrder = currentTreeRef.renderTree.currentLocalHookOrder;
-
-// 	currentTreeRef.renderTree.currentLocalHookOrder += 1;
-
-// 	if (currentlyRenderingNode?.kind === 'empty-slot') {
-// 		throw new Error("Empty slot can't have ref inside it!");
-// 	}
-
-// 	if (!currentlyRenderingNode?.hasRendered) {
-// 		currentlyRenderingNode.hooks.push({
-// 			kind: 'ref',
-// 			refTo: { current: initialValue }
-// 		});
-// 	}
-
-// 	const existingHook = currentlyRenderingNode.hooks[currentHookOrder];
-
-// 	if (existingHook.kind !== 'ref') {
-// 		throw new Error('Invariant Error: Hook order mismatch');
-// 	}
+			hookMetadata.value = value;
+			triggerReRender({ capturedCurrentlyRenderingRenderNode });
+		},
+	] as const;
+};
 
 
-// 	return existingHook.refTo as { current: T };
-// }
+
+export const useRef = <T>(initialValue: T) => {
+	if (!currentTreeRef.renderTree) {
+		throw new Error("Cannot call use state outside of a react component");
+	}
+	if (!currentTreeRef.renderTree.currentlyRendering) {
+		throw new Error("Component being called outside of react internals");
+	}
+
+	const currentStateOrder =
+		currentTreeRef.renderTree.currentLocalCurrentHookOrder;
+	currentTreeRef.renderTree.currentLocalCurrentHookOrder += 1;
+	const currentlyRendering = currentTreeRef.renderTree?.currentlyRendering;
+
+	if (!currentlyRendering) {
+		throw new Error("Cannot call use state outside of a react component");
+	}
+
+	if (currentlyRendering.kind === "empty-slot") {
+		throw new Error("A slot will never call a hook");
+	}
+
+	if (!currentlyRendering.hasRendered) {
+		const refTo = {
+			current: initialValue,
+		};
+		currentlyRendering.hooks.push({
+			kind: "ref",
+			refTo,
+		});
+		return refTo;
+	}
+
+	const hookValue = currentlyRendering.hooks[currentStateOrder];
+	if (hookValue.kind !== "ref") {
+		throw new Error("Different hooks called compared previous render");
+	}
+
+	return hookValue.refTo as { current: T };
+};
 
 
-// export function useEffect(cb: () => unknown, deps: Array<unknown>) {
-// 	if (!currentTreeRef.renderTree?.currentlyRendering) {
-// 		throw new Error('Cannot call useEffect outside of react component');
-// 	}
+export const useEffect = (cb: () => void, deps: Array<unknown>) => {
+	if (!currentTreeRef.renderTree) {
+		throw new Error("Cannot call use effect outside of a react component");
+	}
+	if (!currentTreeRef.renderTree.currentlyRendering) {
+		throw new Error("Component being called outside of react internals");
+	}
+	const currentlyRendering = currentTreeRef.renderTree?.currentlyRendering;
 
-// 	const currentlyRenderingNode = currentTreeRef.renderTree.currentlyRendering;
-// 	const currentHookOrder = currentTreeRef.renderTree.currentLocalHookOrder;
+	if (!currentlyRendering) {
+		throw new Error("Cannot call use effect outside of a react component");
+	}
 
-// 	currentTreeRef.renderTree.currentLocalHookOrder += 1;
+	if (currentlyRendering.kind === "empty-slot") {
+		throw new Error("A slot will never call a hook");
+	}
 
-// 	if (currentlyRenderingNode?.kind === 'empty-slot') {
-// 		throw new Error("Empty slot can't have effect inside it!");
-// 	}
+	const currentStateOrder =
+		currentTreeRef.renderTree.currentLocalCurrentHookOrder;
+	currentTreeRef.renderTree.currentLocalCurrentHookOrder += 1;
+	if (!currentlyRendering.hasRendered) {
+		currentlyRendering.hooks.push({
+			kind: "effect",
+			cb,
+			deps,
+			cleanup: null,
+		});
+	}
 
-// 	if (!currentlyRenderingNode?.hasRendered) {
-// 		currentlyRenderingNode.hooks.push({
-// 			kind: 'effect',
-// 			cb,
-// 			deps,
-// 			cleanup: null
-// 		});
-// 	}
+	const effect = currentlyRendering.hooks[currentStateOrder];
 
-// 	const existingHook = currentlyRenderingNode.hooks[currentHookOrder];
+	if (effect.kind !== "effect") {
+		throw new Error(
+			"Called hooks in different order compared to previous render"
+		);
+	}
 
-// 	if (existingHook.kind !== 'effect') {
-// 		throw new Error('Invariant Error: Hook order mismatch');
-// 	}
-
-// 	if (
-// 		deps.length !== existingHook.deps.length ||
-// 		!deps.every((dep, index) => dep === existingHook.deps[index])) {
-// 		existingHook.cb = cb; // update callback so that callback closure has new values
-// 		existingHook.deps = deps;
-// 	}
-// }
-
-
-// export function useMemo<T>(fn: () => T, deps: Array<unknown>): T {
-// 	if (!currentTreeRef.renderTree?.currentlyRendering) {
-// 		throw new Error('Cannot call useMemo outside of react component');
-// 	}
-
-// 	const currentlyRenderingNode = currentTreeRef.renderTree.currentlyRendering;
-// 	const currentHookOrder = currentTreeRef.renderTree.currentLocalHookOrder;
-
-// 	currentTreeRef.renderTree.currentLocalHookOrder += 1;
-
-// 	if (currentlyRenderingNode?.kind === 'empty-slot') {
-// 		throw new Error("Empty slot can't have memo inside it!");
-// 	}
-
-// 	if (!currentlyRenderingNode?.hasRendered) {
-// 		currentlyRenderingNode.hooks.push({
-// 			kind: 'memo',
-// 			memoizedValue: fn(),
-// 			deps,
-// 		});
-// 	}
-
-// 	const existingHook = currentlyRenderingNode.hooks[currentHookOrder];
-
-// 	if (existingHook.kind !== 'memo') {
-// 		throw new Error('Invariant Error: Hook order mismatch');
-// 	}
-
-// 	if (
-// 		deps.length !== existingHook.deps.length ||
-// 		!deps.every((dep, index) => dep === existingHook.deps[index])) {
-// 		existingHook.memoizedValue = fn();
-// 		existingHook.deps = deps;
-// 	}
-
-// 	return existingHook.memoizedValue as T;
-// }
+	if (
+		effect.deps.length !== deps.length ||
+		!effect.deps.every((dep, index) => {
+			const newDep = deps[index];
+			return newDep === dep;
+		})
+	) {
+		effect.deps = deps;
+		effect.cb = cb;
+	}
+};
 
 
-// export function useCallback<T>(cb: () => T, deps: Array<unknown>): () => T {
-// 	return useMemo(() => cb, deps);
-// }
+export const useMemo = <T>(fn: () => T, deps: Array<unknown>): T => {
+	if (!currentTreeRef.renderTree) {
+		throw new Error("Cannot call use memo outside of a react component");
+	}
+	if (!currentTreeRef.renderTree.currentlyRendering) {
+		throw new Error("Component being called outside of react internals");
+	}
+	const currentlyRendering = currentTreeRef.renderTree?.currentlyRendering;
+
+	if (!currentlyRendering) {
+		throw new Error("Cannot call use memo outside of a react component");
+	}
+
+	if (currentlyRendering.kind === "empty-slot") {
+		throw new Error("A slot will never call a hook");
+	}
+
+	const currentStateOrder =
+		currentTreeRef.renderTree.currentLocalCurrentHookOrder;
+	currentTreeRef.renderTree.currentLocalCurrentHookOrder += 1;
+
+	if (!currentlyRendering.hasRendered) {
+		currentlyRendering.hooks.push({
+			kind: "memo",
+			deps: deps,
+			memoizedValue: fn(),
+		});
+	}
+
+	const memo = currentlyRendering.hooks[currentStateOrder];
+
+	if (memo.kind !== "memo") {
+		throw new Error(
+			"Called hooks in different order compared to previous render"
+		);
+	}
+
+	if (
+		memo.deps.length !== deps.length ||
+		!memo.deps.every((dep, index) => {
+			const newDep = deps[index];
+			return newDep === dep;
+		})
+	) {
+		memo.deps = deps;
+		memo.memoizedValue = fn();
+	}
+
+	return memo.memoizedValue as T;
+};
+
+export const useCallback = <T>(
+	fn: () => T,
+	deps: Array<unknown>
+): (() => T) => {
+	return useMemo(() => fn, deps);
+};
 
 
-// export function createContext<T>(defaultValue: T) {
-// 	const contextId = crypto.randomUUID();
+export const useContext = <T>(context: ReturnType<typeof createContext<T>>) => {
+	const contextId = context.Provider({
+		value: {
+			"__internal-context": true,
+		},
+	} as any) as unknown as string;
+	if (!currentTreeRef.renderTree?.currentlyRendering) {
+		throw new Error("Cannot call use context outside of a react component");
+	}
 
-// 	currentTreeRef.defaultContextState.push({
-// 		contextId,
-// 		state: defaultValue,
-// 	});
+	const capturedCurrentlyRenderingRenderNode =
+		currentTreeRef.renderTree.currentlyRendering;
 
-// 	return {
-// 		Provider: (data: {
-// 			value: T;
-// 			children: Array<
-// 				ReactComponentInternalMetadata | null | false | undefined
-// 			>;
-// 		}) => {
-// 			if (
-// 				typeof data.value === "object" &&
-// 				data.value &&
-// 				"__internal-context" in data.value
-// 			) {
-// 				return contextId as unknown;
-// 			}
+	if (capturedCurrentlyRenderingRenderNode.kind === "empty-slot") {
+		throw new Error(
+			"Invariant Error: A node that called use context cannot be an empty slot"
+		);
+	}
 
-// 			const el = createElement('div', {}, ...data.children);
-// 			if (!(el.kind === "real-element")) {
-// 				throw new Error();
-// 			}
-// 			el.provider = {
-// 				state: data.value,
-// 				contextId,
-// 			};
-// 			return el;
-// 		}
-// 	}
-// }
+	// if (!currentTreeRef.tempViewTree) {
+	//   throw new Error("Invariant error, a partial view tree must have been built by now")
+	// }
 
+	// console.log(currentTreeRef, capturedCurrentlyRenderingRenderNode);
 
-// export function useContext<T>(context: ReturnType<typeof createContext<T>>) {
-// 	if (!currentTreeRef.renderTree) {
-// 		throw new Error('Cannot render component outside of renderTree');
-// 	}
+	const computedViewNode = currentTreeRef.tempViewTreeNodes.find(
+		(node) =>
+			node.id === capturedCurrentlyRenderingRenderNode.computedViewTreeNodeId
+	)!;
 
-// 	const contextId = context.Provider({
-// 		value: {
-// 			"__internal-context": true,
-// 		},
-// 	} as any) as string;
+	// // const computedViewNode = findViewNodeOrThrow((node) => node.id === capturedCurrentlyRenderingRenderNode.id, currentTreeRef.tempViewTree)
 
-// 	const currentlyRenderingRenderNode =
-// 		currentTreeRef.renderTree.currentlyRendering;
-	
-// 	if (!currentlyRenderingRenderNode) {
-// 		throw new Error('Cannot call useContext outside of react component');
-// 	}
+	const state = searchForContextStateUpwards(computedViewNode, contextId);
 
-// 	if (currentlyRenderingRenderNode.kind === "empty-slot") {
-// 		throw new Error(
-// 			"Invariant Error: A node that called use context cannot be an empty slot"
-// 		);
-// 	}
+	console.log("did we read it?", state);
 
-// 	const computedViewNode = currentTreeRef.tempViewNodes.find(
-// 		(node) =>
-// 			node.id === currentlyRenderingRenderNode.computedViewTreeNodeId
-// 	)!;
+	return state as T;
+};
 
-// 	const state = searchForContextStateUpwards(computedViewNode, contextId);
+export const createContext = <T>(initialValue: T) => {
+	const contextId = crypto.randomUUID();
 
-// 	console.log("did we read it?", state);
+	currentTreeRef.defaultContextState.push({
+		contextId,
+		state: initialValue,
+	});
 
-// 	return state as T;
-// }
+	return {
+		Provider: (data: {
+			value: T;
+			children: Array<
+				ReactComponentInternalMetadata | null | false | undefined
+			>;
+		}) => {
+			if (
+				typeof data.value === "object" &&
+				data.value &&
+				"__internal-context" in data.value
+			) {
+				return contextId as unknown as ReturnType<typeof createElement>;
+			}
+			const el = createElement("div", null, ...data.children); // for i have sinned, ideally would of used a fragment
+			console.log(el);
+			if (!(el.kind === "real-element")) {
+				throw new Error();
+			}
+			el.provider = {
+				state: data.value,
+				contextId,
+			};
+			return el;
+		},
+	};
+};
+
 

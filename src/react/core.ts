@@ -1,4 +1,6 @@
-import * as Utils from "../utils";
+import * as Utils from "./utils";
+export { deepTraverseAndModify } from './utils';
+
 import type {
 	ReactRenderTreeNode,
 	ReactViewTreeNode,
@@ -12,16 +14,9 @@ import type {
 	RealElementReactComponentInternalMetadata,
 	Provider,
 	ReactViewTreeNodeRealElement,
-	UseStateMetadata,
 } from "./types";
 
-
-const getComponentProps = (meta: ReactComponentInternalMetadata) => {
-	if (meta.kind === "empty-slot") {
-		return null;
-	}
-	return meta.props;
-};
+export * from './hooks';
 
 const updateElement = ({
 	props,
@@ -39,7 +34,7 @@ const updateElement = ({
 	if (previousDomRef) {
 		Object.assign(previousDomRef, props);
 		previousDomRef.style.cssText =
-			typeof props?.style === "string" ? props.style : "";
+			typeof props?.['style'] === "string" ? props?.['style'] : "";
 		tagComponent.domRef = previousDomRef;
 		return previousDomRef;
 	}
@@ -71,6 +66,7 @@ const updateElement = ({
 	return newEl;
 };
 
+
 const findFirstTagNode = (viewNode: ReactViewTreeNode) => {
 	if (viewNode.kind === "empty-slot") {
 		return null;
@@ -80,7 +76,7 @@ const findFirstTagNode = (viewNode: ReactViewTreeNode) => {
 	}
 	switch (viewNode.metadata.component.kind) {
 		case "function": {
-			return findFirstTagNode(viewNode.childNodes[0]); // will only ever have one child
+			return findFirstTagNode(viewNode.childNodes[0]);
 		}
 		case "tag": {
 			return {
@@ -89,8 +85,8 @@ const findFirstTagNode = (viewNode: ReactViewTreeNode) => {
 			};
 		}
 	}
-	viewNode.metadata.component satisfies never;
 };
+
 
 const updateDom = (args: {
 	oldViewTree: ReactViewTreeNode | null;
@@ -121,14 +117,12 @@ const updateDom = (args: {
 		console.log('newViewTree ', newViewTree);
 		console.log('oldViewTree ', oldViewTree);
 
-		let x = 2;
 		if (
 			!newViewTree ||
 			newViewTree.kind === "empty-slot" ||
 			newViewTree.metadata.kind === "empty-slot"
 		) {
 			if (!oldViewTree) {
-				// then there's nothing to do
 				return { lastUpdated: null };
 			}
 			// then we have to delete the old view tree node
@@ -414,10 +408,12 @@ const updateDom = (args: {
 
 const mapComponentToTaggedUnion = (
 	component: ReactComponentExternalMetadata<AnyProps>["component"]
-): RealElementReactComponentInternalMetadata["component"] =>
-	typeof component === "string"
+): RealElementReactComponentInternalMetadata["component"] => {
+	return typeof component === "string"
 		? { kind: "tag", tagName: component, domRef: null }
 		: { kind: "function", function: component, name: component.name };
+}
+
 
 const mapExternalMetadataToInternalMetadata = ({
 	externalMetadata,
@@ -447,36 +443,6 @@ const mapExternalMetadataToInternalMetadata = ({
 	id: crypto.randomUUID(),
 });
 
-const toChild = (
-	child:
-		| ReactComponentExternalMetadata<AnyProps>["children"][number]
-		| null
-		| false
-): child is ReactComponentExternalMetadata<AnyProps>["children"][number] =>
-	Boolean(child);
-
-const getComponentName = (internalMetadata: ReactComponentInternalMetadata) =>
-	Utils.run(() => {
-		if (internalMetadata.kind === "empty-slot") {
-			return "empty-slot";
-		}
-		switch (internalMetadata.component.kind) {
-			case "function": {
-				return internalMetadata.component.function.name;
-			}
-			case "tag": {
-				return internalMetadata.component.tagName;
-			}
-		}
-		internalMetadata.component satisfies never;
-	});
-
-const getComponentRepr = (internalMetadata: ReactComponentInternalMetadata) =>
-	getComponentName(internalMetadata) +
-	"-" +
-	(internalMetadata.kind === "real-element"
-		? JSON.stringify(internalMetadata.props)
-		: "empty-slot");
 
 export const createElement = <T extends AnyProps>(
 	component: ReactComponentExternalMetadata<T>["component"],
@@ -524,113 +490,38 @@ const findParentViewNode = (id: string): ReactViewTreeNode => {
 	return result;
 };
 
-const findParentRenderNode = (renderNode: ReactRenderTreeNode) => {
-	if (!currentTreeRef.renderTree) {
-		throw new Error("No render tree");
-	}
+// const findParentRenderNode = (renderNode: ReactRenderTreeNode) => {
+// 	if (!currentTreeRef.renderTree) {
+// 		throw new Error("No render tree");
+// 	}
 
-	const aux = (viewNode: ReactRenderTreeNode) => {
-		if (viewNode.kind === "empty-slot") {
-			return null;
-		}
-		if (
-			viewNode.childNodes.some(
-				(n) =>
-					n.kind === "real-element" &&
-					renderNode.kind === "real-element" &&
-					n.id === renderNode.id
-			)
-		) {
-			return viewNode;
-		}
+// 	const aux = (viewNode: ReactRenderTreeNode) => {
+// 		if (viewNode.kind === "empty-slot") {
+// 			return null;
+// 		}
+// 		if (
+// 			viewNode.childNodes.some(
+// 				(n) =>
+// 					n.kind === "real-element" &&
+// 					renderNode.kind === "real-element" &&
+// 					n.id === renderNode.id
+// 			)
+// 		) {
+// 			return viewNode;
+// 		}
 
-		return viewNode.childNodes.find(aux);
-	};
+// 		return viewNode.childNodes.find(aux);
+// 	};
 
-	const result = aux(currentTreeRef.renderTree.root);
+// 	const result = aux(currentTreeRef.renderTree.root);
 
-	if (!result) {
-		return null;
-	}
+// 	if (!result) {
+// 		return null;
+// 	}
 
-	return result;
-};
+// 	return result;
+// };
 
-const isChildOf = ({
-	potentialChildId,
-	potentialParentId,
-}: {
-	potentialParentId: string;
-	potentialChildId: string;
-}): boolean => {
-	const aux = ({
-		node,
-		searchId,
-	}: {
-		node: ReactRenderTreeNode;
-		searchId: string;
-	}): ReactRenderTreeNode | undefined => {
-		if (node.kind === "empty-slot") {
-			return;
-		}
-		if (node.internalMetadata.kind === "empty-slot") {
-			return;
-		}
-		if (node.internalMetadata.id === searchId) {
-			return node;
-		}
-
-		for (const child of node.childNodes) {
-			const res = aux({
-				node: child,
-				searchId,
-			});
-			if (res) {
-				return res;
-			}
-		}
-	};
-
-	if (!currentTreeRef.renderTree) {
-		throw new Error("Invariant error must have render tree");
-	}
-
-	const start = aux({
-		node: currentTreeRef.renderTree.root,
-		searchId: potentialParentId,
-	});
-	if (!start) {
-		throw new Error("Invariant error can't start from a detached node");
-	}
-
-	return !!aux({
-		node: start,
-		searchId: potentialChildId,
-	});
-};
-
-function calculateJsonBytes(jsonString: string): number {
-	return new Blob([jsonString]).size;
-}
-
-const compareIndexPaths = (
-	leftIndexPath: Array<number>,
-	rightIndexPath: Array<number>
-) => {
-	if (leftIndexPath.length !== rightIndexPath.length) {
-		return false;
-	}
-	for (let i = 0; i < leftIndexPath.length; i++) {
-		const leftIndex = leftIndexPath[i];
-		const rightIndex = rightIndexPath[i];
-
-		if (leftIndex !== rightIndex) {
-			return false;
-		}
-	}
-
-	return true;
-};
 
 export const findViewNodeOrThrow = (
 	eq: (node: ReactViewTreeNode) => boolean,
@@ -735,9 +626,9 @@ const reconcileRenderNodeChildNodes = ({
 		}
 		// lets test this later to see if it would of broke, i want to make sure it is doing something (with that left == left bug)
 		if (
-			!compareIndexPaths(oldChildNode.indexPath, newChildNode.indexPath) ||
-			getComponentName(newChildNode.internalMetadata) !==
-			getComponentName(oldChildNode.internalMetadata)
+			!Utils.compareIndexPaths(oldChildNode.indexPath, newChildNode.indexPath) ||
+			Utils.getComponentName(newChildNode.internalMetadata) !==
+			Utils.getComponentName(oldChildNode.internalMetadata)
 		) {
 			reconciledChildNodes.push(newChildNode);
 			return;
@@ -748,13 +639,6 @@ const reconcileRenderNodeChildNodes = ({
 		reconciledChildNodes.push(oldChildNode);
 	});
 	return reconciledChildNodes;
-	//   .filter(
-	//   (node) =>
-	//     node.kind !== "empty-slot" &&
-	//     node.internalMetadata.kind !== "empty-slot" &&
-	//     (node.internalMetadata.component.kind === "function" ||
-	//       node.internalMetadata.provider)
-	// );
 };
 
 const generateRenderNodeChildNodes = ({
@@ -831,10 +715,10 @@ const generateRenderNodeChildNodes = ({
 	return accumulatedSiblings;
 };
 
-const searchForContextStateUpwards = (
+export const searchForContextStateUpwards = (
 	viewNode: ReactViewTreeNode,
 	ctxId: string
-) => {
+): any => {
 	if (viewNode.parent === null) {
 		const defaultContext = currentTreeRef.defaultContextState.find(
 			(ctx) => ctx.contextId === ctxId
@@ -858,83 +742,6 @@ const searchForContextStateUpwards = (
 	}
 
 	return searchForContextStateUpwards(viewNode.parent, ctxId);
-};
-
-export const useContext = <T>(context: ReturnType<typeof createContext<T>>) => {
-	const contextId = context.Provider({
-		value: {
-			"__internal-context": true,
-		},
-	} as any) as unknown as string;
-	if (!currentTreeRef.renderTree?.currentlyRendering) {
-		throw new Error("Cannot call use context outside of a react component");
-	}
-
-	const capturedCurrentlyRenderingRenderNode =
-		currentTreeRef.renderTree.currentlyRendering;
-
-	if (capturedCurrentlyRenderingRenderNode.kind === "empty-slot") {
-		throw new Error(
-			"Invariant Error: A node that called use context cannot be an empty slot"
-		);
-	}
-
-	// if (!currentTreeRef.tempViewTree) {
-	//   throw new Error("Invariant error, a partial view tree must have been built by now")
-	// }
-
-	// console.log(currentTreeRef, capturedCurrentlyRenderingRenderNode);
-
-	const computedViewNode = currentTreeRef.tempViewTreeNodes.find(
-		(node) =>
-			node.id === capturedCurrentlyRenderingRenderNode.computedViewTreeNodeId
-	)!;
-
-	// // const computedViewNode = findViewNodeOrThrow((node) => node.id === capturedCurrentlyRenderingRenderNode.id, currentTreeRef.tempViewTree)
-
-	const state = searchForContextStateUpwards(computedViewNode, contextId);
-
-	console.log("did we read it?", state);
-
-	return state as T;
-};
-
-export const createContext = <T>(initialValue: T) => {
-	const contextId = crypto.randomUUID();
-
-	currentTreeRef.defaultContextState.push({
-		contextId,
-		state: initialValue,
-	});
-
-	return {
-		// will not impl consumer
-
-		Provider: (data: {
-			value: T;
-			children: Array<
-				ReactComponentInternalMetadata | null | false | undefined
-			>;
-		}) => {
-			if (
-				typeof data.value === "object" &&
-				data.value &&
-				"__internal-context" in data.value
-			) {
-				return contextId as unknown as ReturnType<typeof createElement>;
-			}
-			const el = createElement("div", null, ...data.children); // for i have sinned, ideally would of used a fragment
-			console.log(el);
-			if (!(el.kind === "real-element")) {
-				throw new Error();
-			}
-			el.provider = {
-				state: data.value,
-				contextId,
-			};
-			return el;
-		},
-	};
 };
 
 /**
@@ -974,7 +781,6 @@ const generateViewTreeHelper = ({
 	renderNode,
 	startingFromRenderNodeId,
 	parentViewNode,
-	isEntrypoint = false,
 }: {
 	renderNode: ReactRenderTreeNode;
 
@@ -1136,7 +942,7 @@ const generateViewTreeHelper = ({
 					if (!computedNode) {
 						return reRenderChild();
 					}
-					const isChild = isChildOf({
+					const isChild = Utils.isChildOf({
 						potentialChildId: child.id,
 						potentialParentId: parentRenderTreeNode.internalMetadata.id,
 					});
@@ -1244,7 +1050,7 @@ const generateViewTreeHelper = ({
 						(newNode) =>
 							newNode.kind !== "empty-slot" &&
 							node.kind !== "empty-slot" &&
-							compareIndexPaths(newNode.indexPath, node.indexPath)
+							Utils.compareIndexPaths(newNode.indexPath, node.indexPath)
 					)
 			);
 
@@ -1287,7 +1093,7 @@ const generateViewTreeHelper = ({
 };
 
 
-const currentTreeRef: {
+export const currentTreeRef: {
 	tempViewTreeNodes: Array<ReactViewTreeNodeRealElement>;
 	viewTree: ReactViewTree | null;
 	renderTree: ReactRenderTree | null;
@@ -1298,44 +1104,6 @@ const currentTreeRef: {
 	defaultContextState: [],
 	tempViewTreeNodes: [],
 };
-
-export function deepTraverseAndModify(obj: any): any {
-	if (Array.isArray(obj)) {
-		return obj.map(deepTraverseAndModify);
-	} else if (typeof obj === "object" && obj !== null) {
-		const newObj: any = {};
-
-		for (const [key, value] of Object.entries(obj)) {
-			if (
-				key === "computedViewTreeNode" &&
-				value &&
-				typeof value === "object" &&
-				"id" in value
-			) {
-				newObj["computedViewTreeNodeId"] = value.id;
-			} else if (
-				key === "internalMetadata" &&
-				value &&
-				typeof value === "object" &&
-				"id" in value
-			) {
-				let x = value as unknown as { component: any; id: string };
-				newObj["internalMetadataName+Id"] = (
-					x.component.tagName +
-					x.component.name +
-					"-" +
-					x.id.slice(0, 4)
-				).replace("undefined", "");
-			} else {
-				newObj[key] = deepTraverseAndModify(value);
-			}
-		}
-
-		return newObj;
-	}
-
-	return obj;
-}
 
 export const buildReactTrees = (
 	rootComponentInternalMetadata: ReactComponentInternalMetadata
@@ -1399,154 +1167,8 @@ export const buildReactTrees = (
 	};
 };
 
-export const useRef = <T>(initialValue: T) => {
-	if (!currentTreeRef.renderTree) {
-		throw new Error("Cannot call use state outside of a react component");
-	}
-	if (!currentTreeRef.renderTree.currentlyRendering) {
-		throw new Error("Component being called outside of react internals");
-	}
 
-	const currentStateOrder =
-		currentTreeRef.renderTree.currentLocalCurrentHookOrder;
-	currentTreeRef.renderTree.currentLocalCurrentHookOrder += 1;
-	const currentlyRendering = currentTreeRef.renderTree?.currentlyRendering;
-
-	if (!currentlyRendering) {
-		throw new Error("Cannot call use state outside of a react component");
-	}
-
-	if (currentlyRendering.kind === "empty-slot") {
-		throw new Error("A slot will never call a hook");
-	}
-
-	if (!currentlyRendering.hasRendered) {
-		const refTo = {
-			current: initialValue,
-		};
-		currentlyRendering.hooks.push({
-			kind: "ref",
-			refTo,
-		});
-		return refTo;
-	}
-
-	const hookValue = currentlyRendering.hooks[currentStateOrder];
-	if (hookValue.kind !== "ref") {
-		throw new Error("Different hooks called compared previous render");
-	}
-
-	return hookValue.refTo as { current: T };
-};
-
-// this is wrong, need to potentially update deps and cb
-export const useEffect = (cb: () => void, deps: Array<unknown>) => {
-	if (!currentTreeRef.renderTree) {
-		throw new Error("Cannot call use effect outside of a react component");
-	}
-	if (!currentTreeRef.renderTree.currentlyRendering) {
-		throw new Error("Component being called outside of react internals");
-	}
-	const currentlyRendering = currentTreeRef.renderTree?.currentlyRendering;
-
-	if (!currentlyRendering) {
-		throw new Error("Cannot call use effect outside of a react component");
-	}
-
-	if (currentlyRendering.kind === "empty-slot") {
-		throw new Error("A slot will never call a hook");
-	}
-
-	const currentStateOrder =
-		currentTreeRef.renderTree.currentLocalCurrentHookOrder;
-	currentTreeRef.renderTree.currentLocalCurrentHookOrder += 1;
-	if (!currentlyRendering.hasRendered) {
-		currentlyRendering.hooks.push({
-			kind: "effect",
-			cb,
-			deps,
-			cleanup: null,
-		});
-	}
-
-	const effect = currentlyRendering.hooks[currentStateOrder];
-
-	if (effect.kind !== "effect") {
-		throw new Error(
-			"Called hooks in different order compared to previous render"
-		);
-	}
-
-	if (
-		effect.deps.length !== deps.length ||
-		!effect.deps.every((dep, index) => {
-			const newDep = deps[index];
-			return newDep === dep;
-		})
-	) {
-		effect.deps = deps;
-		effect.cb = cb;
-	}
-};
-
-export const useMemo = <T>(fn: () => T, deps: Array<unknown>): T => {
-	if (!currentTreeRef.renderTree) {
-		throw new Error("Cannot call use memo outside of a react component");
-	}
-	if (!currentTreeRef.renderTree.currentlyRendering) {
-		throw new Error("Component being called outside of react internals");
-	}
-	const currentlyRendering = currentTreeRef.renderTree?.currentlyRendering;
-
-	if (!currentlyRendering) {
-		throw new Error("Cannot call use memo outside of a react component");
-	}
-
-	if (currentlyRendering.kind === "empty-slot") {
-		throw new Error("A slot will never call a hook");
-	}
-
-	const currentStateOrder =
-		currentTreeRef.renderTree.currentLocalCurrentHookOrder;
-	currentTreeRef.renderTree.currentLocalCurrentHookOrder += 1;
-
-	if (!currentlyRendering.hasRendered) {
-		currentlyRendering.hooks.push({
-			kind: "memo",
-			deps: deps,
-			memoizedValue: fn(),
-		});
-	}
-
-	const memo = currentlyRendering.hooks[currentStateOrder];
-
-	if (memo.kind !== "memo") {
-		throw new Error(
-			"Called hooks in different order compared to previous render"
-		);
-	}
-
-	if (
-		memo.deps.length !== deps.length ||
-		!memo.deps.every((dep, index) => {
-			const newDep = deps[index];
-			return newDep === dep;
-		})
-	) {
-		memo.deps = deps;
-		memo.memoizedValue = fn();
-	}
-
-	return memo.memoizedValue as T;
-};
-
-export const useCallback = <T>(
-	fn: () => T,
-	deps: Array<unknown>
-): (() => T) => {
-	return useMemo(() => fn, deps);
-};
-const triggerReRender = ({
+export const triggerReRender = ({
 	capturedCurrentlyRenderingRenderNode,
 }: {
 	capturedCurrentlyRenderingRenderNode: RealElement & {
@@ -1636,65 +1258,12 @@ const triggerReRender = ({
 	});
 };
 
-export const useState = <T>(initialValue: T) => {
-	if (!currentTreeRef.renderTree?.currentlyRendering) {
-		throw new Error("Cannot call use state outside of a react component");
-	}
-
-	const currentStateOrder =
-		currentTreeRef.renderTree.currentLocalCurrentHookOrder;
-	currentTreeRef.renderTree.currentLocalCurrentHookOrder += 1;
-
-	const capturedCurrentlyRenderingRenderNode =
-		currentTreeRef.renderTree.currentlyRendering;
-
-	if (capturedCurrentlyRenderingRenderNode.kind === "empty-slot") {
-		throw new Error(
-			"Invariant Error: A node that triggered a set state cannot be an empty slot"
-		);
-	}
-
-	if (!capturedCurrentlyRenderingRenderNode.hasRendered) {
-		capturedCurrentlyRenderingRenderNode.hooks.push({
-			kind: "state",
-			value: initialValue,
-		});
-	}
-
-	const hookMetadata =
-		capturedCurrentlyRenderingRenderNode.hooks[currentStateOrder];
-
-	if (hookMetadata.kind !== "state") {
-		throw new Error("Different number of hooks rendered between render");
-	}
-
-	return [
-		hookMetadata.value as T,
-		(value: T) => {
-			if (!capturedCurrentlyRenderingRenderNode.computedViewTreeNodeId) {
-				throw new Error(
-					"Invariant: set state trying to re-render unmounted component"
-				);
-			}
-
-			if (!currentTreeRef.viewTree || !currentTreeRef.renderTree) {
-				throw new Error("Invariant error, no view tree or no render tree");
-			}
-
-			hookMetadata.value = value;
-			triggerReRender({ capturedCurrentlyRenderingRenderNode });
-		},
-	] as const;
-};
-
 export const render = (
 	rootElement: ReturnType<typeof createElement>,
 	domEl: HTMLElement
 ) => {
-	const { reactViewTree, reactRenderTree } = buildReactTrees(rootElement);
+	const { reactViewTree } = buildReactTrees(rootElement);
 
-	console.log('reactViewTree ', reactViewTree);
-	// console.log('reactRenderTree ', reactRenderTree);
 
 	updateDom({
 		oldViewTree: null,
