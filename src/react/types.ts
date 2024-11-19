@@ -55,7 +55,6 @@ export type RealElementReactComponentInternalMetadata = {
 	provider: null | Provider;
 	props: AnyProps;
 	children: Array<ReactComponentInternalMetadata>;
-	// hooks: Array<ReactHookMetadata>;
 	id: string;
 };
 
@@ -113,27 +112,14 @@ export type RealElement = {
 	hooks: Array<
 		UseStateMetadata | UseRefMetadata | UseEffectMetadata | UseMemoMetadata
 	>;
-	// | UseContextMetadata
-
 	indexPath: Array<number>;
-	hasRendered: boolean; // im confident we don't need ths and can just derive this from existing info on the trees
+	hasRendered: boolean;
 };
 
 export type EmptySlot = {
 	kind: "empty-slot";
 };
-// render tree node has a direct link to view tree node
 export type ReactRenderTreeNode = (RealElement | EmptySlot) & {
 	parent: null | ReactRenderTreeNode;
 };
 
-// export type CreateElementMetadataNode = {
-//   id: string;
-//   childNodes: Array<CreateElementMetadataNode>;
-//   metadata:
-//     | {
-//         kind: "real-element";
-//         componentInternalMetadata: ReactComponentInternalMetadata;
-//       }
-//     | { kind: "empty-slot" };
-// };

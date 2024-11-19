@@ -5,7 +5,7 @@ const updateElement = ({ props, tagComponent, previousDomRef, lastParent, insert
     if (previousDomRef) {
         Object.assign(previousDomRef, props);
         previousDomRef.style.cssText =
-            typeof props?.style === "string" ? props.style : "";
+            typeof props?.['style'] === "string" ? props?.['style'] : "";
         tagComponent.domRef = previousDomRef;
         return previousDomRef;
     }
@@ -47,15 +47,10 @@ const findFirstTagNode = (viewNode) => {
 };
 const updateDom = (args) => {
     const aux = ({ lastUpdatedSibling, newViewTree, oldViewTree, parentDomNode, }) => {
-        console.log('lastUpdatedSibling ', lastUpdatedSibling);
-        console.log('newViewTree ', newViewTree);
-        console.log('oldViewTree ', oldViewTree);
-        let x = 2;
         if (!newViewTree ||
             newViewTree.kind === "empty-slot" ||
             newViewTree.metadata.kind === "empty-slot") {
             if (!oldViewTree) {
-                // then there's nothing to do
                 return { lastUpdated: null };
             }
             // then we have to delete the old view tree node
@@ -95,11 +90,12 @@ const updateDom = (args) => {
                     });
                     // second time we do this which is a little annoying
                     // could abstract to a fn but would like aux to be that fn
-                    let trackedLastUpdatedSibling = null;
+                    // let trackedLastUpdatedSibling: HTMLElement | null = null;
                     // we make calls to add every child since there is no view tree to diff against
                     newViewTree.childNodes.forEach((newChildNode) => {
                         aux({
-                            lastUpdatedSibling: trackedLastUpdatedSibling,
+                            // lastUpdatedSibling: trackedLastUpdatedSibling,
+                            lastUpdatedSibling: null,
                             newViewTree: newChildNode,
                             oldViewTree: null,
                             parentDomNode: updatedElement,
@@ -108,7 +104,6 @@ const updateDom = (args) => {
                     return { lastUpdated: updatedElement };
                 }
             }
-            newViewTree.metadata.component;
         }
         switch (newViewTree.metadata.component.kind) {
             // pass through case
@@ -124,105 +119,80 @@ const updateDom = (args) => {
                     lastUpdated: auxResult.lastUpdated,
                 };
             }
-            case "tag":
-                {
-                    switch (oldViewTree.metadata.component.kind) {
-                        case "function": {
-                            // re-apply the function with the next child of the function
+            case "tag": {
+                switch (oldViewTree.metadata.component.kind) {
+                    case "function": {
+                        // re-apply the function with the next child of the function
+                        const auxResult = aux({
+                            lastUpdatedSibling: lastUpdatedSibling,
+                            newViewTree: newViewTree,
+                            oldViewTree: oldViewTree.childNodes[0], // will always have one child
+                            parentDomNode: parentDomNode,
+                        });
+                        return { lastUpdated: auxResult.lastUpdated };
+                    }
+                    case "tag": {
+                        const lastUpdated = Utils.run(() => {
+                            if (!(oldViewTree.metadata.kind === "real-element") ||
+                                !(newViewTree.metadata.kind === "real-element")) {
+                                throw new Error("No longer a non escaping function");
+                            }
+                            if (!(oldViewTree.metadata.component.kind === "tag") ||
+                                !(newViewTree.metadata.component.kind === "tag")) {
+                                throw new Error("No longer a non-escaping closure");
+                            }
+                            if (!Utils.deepEqual(oldViewTree.metadata.props, newViewTree.metadata.props) ||
+                                oldViewTree.metadata.component.tagName !==
+                                    newViewTree.metadata.component.tagName) {
+                                return updateElement({
+                                    insertedBefore: lastUpdatedSibling,
+                                    lastParent: parentDomNode,
+                                    previousDomRef: oldViewTree.metadata.component.domRef,
+                                    props: newViewTree.metadata.props,
+                                    tagComponent: newViewTree.metadata.component,
+                                });
+                            }
+                            newViewTree.metadata.component.domRef =
+                                oldViewTree.metadata.component.domRef;
+                            // const findParenTag = (node: ReactViewTreeNode) => {
+                            //   // if (node.kind === 'empty-slot')
+                            // }
+                            return oldViewTree.metadata.component.domRef;
+                        });
+                        // then there's an associated existing dom node and we just update its props
+                        let trackedLastUpdatedSibling = null;
+                        // handles deleting any extra nodes from the previous tree not associated with a new view tree node
+                        oldViewTree.childNodes.forEach((oldNode, index) => {
+                            // const associatedWith = newViewTree.childNodes.at(index);
+                            if (index < newViewTree.childNodes.length) {
+                                return;
+                            }
+                            aux({
+                                parentDomNode: lastUpdated,
+                                lastUpdatedSibling: trackedLastUpdatedSibling,
+                                newViewTree: null,
+                                oldViewTree: oldNode,
+                            });
+                        });
+                        // handles adding any extra nodes that appeared in the new view tree
+                        newViewTree.childNodes.forEach((newNode, index) => {
+                            const associatedWith = oldViewTree.childNodes.at(index);
+                            // we do care about the return result since it may add to the dom
                             const auxResult = aux({
-                                lastUpdatedSibling: lastUpdatedSibling,
-                                newViewTree: newViewTree,
-                                oldViewTree: oldViewTree.childNodes[0], // will always have one child
-                                parentDomNode: parentDomNode,
+                                lastUpdatedSibling: trackedLastUpdatedSibling,
+                                newViewTree: newNode,
+                                oldViewTree: associatedWith ?? null,
+                                parentDomNode: lastUpdated,
                             });
-                            return { lastUpdated: auxResult.lastUpdated };
-                        }
-                        case "tag": {
-                            const lastUpdated = Utils.run(() => {
-                                if (!(oldViewTree.metadata.kind === "real-element") ||
-                                    !(newViewTree.metadata.kind === "real-element")) {
-                                    throw new Error("No longer a non escaping function");
-                                }
-                                if (!(oldViewTree.metadata.component.kind === "tag") ||
-                                    !(newViewTree.metadata.component.kind === "tag")) {
-                                    throw new Error("No longer a non-escaping closure");
-                                }
-                                if (!Utils.deepEqual(oldViewTree.metadata.props, newViewTree.metadata.props) ||
-                                    oldViewTree.metadata.component.tagName !==
-                                        newViewTree.metadata.component.tagName) {
-                                    return updateElement({
-                                        insertedBefore: lastUpdatedSibling,
-                                        lastParent: parentDomNode,
-                                        previousDomRef: oldViewTree.metadata.component.domRef,
-                                        props: newViewTree.metadata.props,
-                                        tagComponent: newViewTree.metadata.component,
-                                    });
-                                }
-                                newViewTree.metadata.component.domRef =
-                                    oldViewTree.metadata.component.domRef;
-                                // const findParenTag = (node: ReactViewTreeNode) => {
-                                //   // if (node.kind === 'empty-slot')
-                                // }
-                                return oldViewTree.metadata.component.domRef;
-                            });
-                            // then there's an associated existing dom node and we just update its props
-                            // now we recursively apply aux to the children nodes
-                            // const [oldToNew, newToOld, definedAssociation] = mapChildNodes({
-                            //   leftNodes: oldViewTree.childNodes,
-                            //   rightNodes: newViewTree.childNodes,
-                            // });
-                            let trackedLastUpdatedSibling = null;
-                            // handles deleting any extra nodes from the previous tree not associated with a new view tree node
-                            oldViewTree.childNodes.forEach((oldNode, index) => {
-                                // const associatedWith = newViewTree.childNodes.at(index);
-                                if (index < newViewTree.childNodes.length) {
-                                    return;
-                                }
-                                // if (!associatedWith) {
-                                // we don't care about the return result since it wont update or add anything
-                                aux({
-                                    parentDomNode: lastUpdated,
-                                    lastUpdatedSibling: trackedLastUpdatedSibling,
-                                    newViewTree: null,
-                                    oldViewTree: oldNode,
-                                });
-                                // trackedLastUpdatedChild = auxResult.lastUpdated;
-                                // }
-                            });
-                            // handles adding any extra nodes that appeared in the new view tree
-                            newViewTree.childNodes.forEach((newNode, index) => {
-                                const associatedWith = oldViewTree.childNodes.at(index);
-                                // we do care about the return result since it may add to the dom
-                                const auxResult = aux({
-                                    lastUpdatedSibling: trackedLastUpdatedSibling,
-                                    newViewTree: newNode,
-                                    oldViewTree: associatedWith ?? null,
-                                    parentDomNode: lastUpdated,
-                                });
-                                // incase it didn't add anything (e.g. the new node was a slot), we want to not destroy the last sibling
-                                trackedLastUpdatedSibling =
-                                    auxResult.lastUpdated ?? trackedLastUpdatedSibling;
-                            });
-                            // definedAssociation.forEach(
-                            //   ({ left: oldChildNode, right: newChildNode }) => {
-                            //     const auxResult = aux({
-                            //       lastUpdatedSibling: trackedLastUpdatedSibling,
-                            //       newViewTree: newChildNode,
-                            //       oldViewTree: oldChildNode,
-                            //       parentDomNode: lastUpdated,
-                            //     });
-                            //     // same reasoning when updating trackedLastUpdatedSibling in the add loop
-                            //     trackedLastUpdatedSibling =
-                            //       auxResult.lastUpdated ?? trackedLastUpdatedSibling;
-                            //   }
-                            // );
-                            return { lastUpdated: lastUpdated };
-                        }
+                            // incase it didn't add anything (e.g. the new node was a slot), we want to not destroy the last sibling
+                            trackedLastUpdatedSibling =
+                                auxResult.lastUpdated ?? trackedLastUpdatedSibling;
+                        });
+                        return { lastUpdated: lastUpdated };
                     }
                 }
-                oldViewTree.metadata.component;
+            }
         }
-        newViewTree.metadata.component;
     };
     switch (args.insertInfo.kind) {
         case "root": {
@@ -253,9 +223,9 @@ const updateDom = (args) => {
                         return prev;
                     }, null);
                 // console.log('previousViewTreeParent ', args.insertInfo.previousViewTreeParent)
-                console.log('previousChild ', previousChild);
+                // console.log('previousChild ', previousChild);
                 const tagNode = previousChild ? findFirstTagNode(previousChild) : null;
-                console.log('tagNode ', tagNode);
+                // console.log('tagNode ', tagNode);	
                 if (tagNode && !tagNode.component.domRef) {
                     throw new Error("Invariant Error: Previous view tree must always have dom nodes on tags");
                 }
@@ -263,7 +233,7 @@ const updateDom = (args) => {
                     throw new Error("Invariant Error: Attempting to update a detached dom node");
                 }
                 const parentTagNode = findFirstTagNode(args.insertInfo.previousViewTreeParent);
-                console.log('parentTagNode ', parentTagNode);
+                // console.log('parentTagNode ', parentTagNode);
                 if (!parentTagNode) {
                     throw new Error("Invariant Error: A parent node could not have been an empty slot since we know it has view node children");
                 }
@@ -272,7 +242,8 @@ const updateDom = (args) => {
                     throw new Error("Invariant Error: Previous view tree must always have dom nodes on tags");
                 }
                 aux({
-                    lastUpdatedSibling: tagNode?.component.domRef ?? null,
+                    // lastUpdatedSibling: tagNode?.component.domRef ?? null,
+                    lastUpdatedSibling: null,
                     newViewTree: args.newViewTree,
                     oldViewTree: args.oldViewTree,
                     parentDomNode: parentTagNode.component.domRef,
@@ -280,7 +251,6 @@ const updateDom = (args) => {
             }
             return;
     }
-    args.insertInfo;
 };
 const mapComponentToTaggedUnion = (component) => {
     return typeof component === "string"
@@ -455,7 +425,6 @@ const generateRenderNodeChildNodes = ({ internalMetadata, parent, }) => {
         if (!currentTreeRef.renderTree) {
             throw new Error("invariant error");
         }
-        // extremely inefficient, but it works :P
         const existingNode = internalMetadata.kind === "empty-slot"
             ? null
             : findRenderNode((node) => {
@@ -470,6 +439,12 @@ const generateRenderNodeChildNodes = ({ internalMetadata, parent, }) => {
         if (existingNode) {
             return;
         }
+        if (internalMetadata.kind === "empty-slot") {
+            return {
+                kind: 'empty-slot',
+                parent: parent,
+            };
+        }
         const newNode = {
             indexPath,
             childNodes: [],
@@ -482,9 +457,6 @@ const generateRenderNodeChildNodes = ({ internalMetadata, parent, }) => {
             parent,
         };
         accumulatedSiblings.push(newNode);
-        if (internalMetadata.kind === "empty-slot") {
-            return newNode;
-        }
         internalMetadata.children.map((child, index) => {
             aux({
                 internalMetadata: child,
@@ -508,7 +480,6 @@ export const searchForContextStateUpwards = (viewNode, ctxId) => {
         }
         return defaultContext.state;
     }
-    // console.log("searching up on", viewNode, ctxId);
     if (viewNode.kind === "empty-slot") {
         return searchForContextStateUpwards(viewNode.parent, ctxId);
     }
@@ -526,7 +497,6 @@ export const searchForContextStateUpwards = (viewNode, ctxId) => {
  *
  */
 const generateViewTree = ({ renderNode, parentViewNode, }) => {
-    // console.log(calculateJsonBytes(JSON.stringify(currentTreeRef.renderTree)));
     if (renderNode.kind === "empty-slot") {
         return {
             kind: "empty-slot",
@@ -538,48 +508,42 @@ const generateViewTree = ({ renderNode, parentViewNode, }) => {
         renderNode: renderNode,
         startingFromRenderNodeId: renderNode.id,
         parentViewNode,
-        isEntrypoint: true,
+        // isEntrypoint: true,
     });
     currentTreeRef.tempViewTreeNodes = [];
     return newViewTree;
 };
-const generateViewTreeHelper = ({ renderNode, startingFromRenderNodeId, parentViewNode, isEntrypoint = false, }) => {
+const generateViewTreeHelper = ({ renderNode, startingFromRenderNodeId, parentViewNode, }) => {
     if (!currentTreeRef.renderTree) {
         throw new Error("Cannot render component outside of react tree");
     }
-    // if the node itself represents nothing, don't traverse
-    if (renderNode.kind === "empty-slot") {
+    if (renderNode.kind === "empty-slot" ||
+        renderNode.internalMetadata.kind === 'empty-slot') {
         const newId = crypto.randomUUID();
-        // renderNode.computedViewTreeNodeId = newId;
         return {
             kind: "empty-slot",
             id: newId,
             parent: parentViewNode,
         };
     }
-    // console.log(
-    //   "bytes of render tree",
-    //   calculateJsonBytes(JSON.stringify(currentTreeRef.renderTree))
-    // );
-    // if the component directly outputs an empty slot, nothing to generate so don't traverse
-    if (renderNode.internalMetadata.kind === "empty-slot") {
-        const newId = crypto.randomUUID();
-        renderNode.computedViewTreeNodeId = newId;
-        const node = {
-            id: newId,
-            metadata: renderNode.internalMetadata,
-            childNodes: [],
-            indexPath: renderNode.indexPath,
-            kind: "real-element",
-            parent: parentViewNode,
-        };
-        node.childNodes.push({
-            kind: "empty-slot",
-            id: crypto.randomUUID(),
-            parent: node,
-        });
-        return node;
-    }
+    // if (renderNode.internalMetadata.kind === "empty-slot") {
+    // 	const newId = crypto.randomUUID();
+    // 	renderNode.computedViewTreeNodeId = newId;
+    // 	const node: ReactViewTreeNodeRealElement = {
+    // 		id: newId,
+    // 		metadata: renderNode.internalMetadata,
+    // 		childNodes: [],
+    // 		indexPath: renderNode.indexPath,
+    // 		kind: "real-element",
+    // 		parent: parentViewNode,
+    // 	};
+    // 	node.childNodes.push({
+    // 		kind: "empty-slot",
+    // 		id: crypto.randomUUID(),
+    // 		parent: node,
+    // 	});
+    // 	return node;
+    // }
     const newNode = {
         id: crypto.randomUUID(),
         metadata: renderNode.internalMetadata,
@@ -587,107 +551,10 @@ const generateViewTreeHelper = ({ renderNode, startingFromRenderNodeId, parentVi
         indexPath: renderNode.indexPath,
         kind: "real-element",
         parent: parentViewNode,
-        // key: getKey(renderNode), // i probably don't want this...
     };
-    // if (isEntrypoint) {
-    //   currentTreeRef.tempViewTree = newNode
-    // }
     currentTreeRef.tempViewTreeNodes.push(newNode);
     renderNode.computedViewTreeNodeId = newNode.id;
     switch (renderNode.internalMetadata.component.kind) {
-        case "tag": {
-            const fullyComputedChildren = renderNode.internalMetadata.children.map((child) => {
-                if (child.kind === "empty-slot") {
-                    // console.log('tag child is empty slot')
-                    return {
-                        renderNode: { kind: "empty-slot", parent: renderNode },
-                        viewNode: {
-                            kind: "empty-slot",
-                            id: crypto.randomUUID(), // no idea what to put for these ideas if im being real
-                            parent: newNode, // is that the right parent?
-                        },
-                    };
-                }
-                if (!currentTreeRef.renderTree?.root) {
-                    throw new Error("determine the invariant error type later");
-                }
-                const existingRenderTreeNode = findRenderNodeOrThrow((node) => {
-                    if (node.kind === "empty-slot") {
-                        return false;
-                    }
-                    if (node.internalMetadata.kind === "empty-slot") {
-                        return false;
-                    }
-                    return node.internalMetadata.id === child.id;
-                }, currentTreeRef.renderTree.root);
-                const parentRenderTreeNode = findRenderNodeOrThrow((node) => {
-                    if (node.kind === "empty-slot") {
-                        return false;
-                    }
-                    if (node.internalMetadata.kind === "empty-slot") {
-                        return false;
-                    }
-                    return node.id === startingFromRenderNodeId;
-                }, currentTreeRef.renderTree.root);
-                if (parentRenderTreeNode.kind === "empty-slot" ||
-                    parentRenderTreeNode.internalMetadata.kind === "empty-slot") {
-                    throw new Error("Invariant Error: Parent cannot be an empty slot");
-                }
-                const reRenderChild = () => {
-                    const viewNode = generateViewTreeHelper({
-                        renderNode: existingRenderTreeNode,
-                        startingFromRenderNodeId: startingFromRenderNodeId,
-                        parentViewNode: newNode,
-                    });
-                    // if (viewNode.kind === "empty-slot") {
-                    // 	return {
-                    // 		viewNode: viewNode,
-                    // 		renderNode: existingRenderTreeNode,
-                    // 	};
-                    // }
-                    return { viewNode, renderNode: existingRenderTreeNode };
-                };
-                if (!currentTreeRef.viewTree) {
-                    return reRenderChild();
-                }
-                if (existingRenderTreeNode.kind === "empty-slot") {
-                    return {
-                        viewNode: {
-                            kind: "empty-slot",
-                            id: crypto.randomUUID(),
-                            parent: newNode,
-                        },
-                        renderNode: existingRenderTreeNode,
-                    };
-                }
-                const computedNode = currentTreeRef.viewTree.root &&
-                    existingRenderTreeNode.computedViewTreeNodeId
-                    ? findViewNodeOrThrow((node) => node.id === existingRenderTreeNode.computedViewTreeNodeId, currentTreeRef.viewTree.root)
-                    : null;
-                if (!computedNode) {
-                    return reRenderChild();
-                }
-                const isChild = Utils.isChildOf({
-                    potentialChildId: child.id,
-                    potentialParentId: parentRenderTreeNode.internalMetadata.id,
-                });
-                const shouldReRender = existingRenderTreeNode.internalMetadata.kind === "empty-slot"
-                    ? false
-                    : isChild;
-                if (!shouldReRender) {
-                    // console.log("Skipping re-render of", getComponentName(child));
-                    return {
-                        viewNode: computedNode,
-                        renderNode: existingRenderTreeNode,
-                    };
-                }
-                return reRenderChild();
-            });
-            newNode.childNodes = fullyComputedChildren
-                .map(({ viewNode }) => viewNode)
-                .filter((viewNode) => viewNode !== null);
-            break;
-        }
         case "function": {
             const childrenSpreadProps = renderNode.internalMetadata.children.length > 0
                 ? {
@@ -733,7 +600,6 @@ const generateViewTreeHelper = ({ renderNode, startingFromRenderNodeId, parentVi
                 internalMetadata: outputInternalMetadata,
                 parent: renderNode,
             });
-            // console.log("Generated children", generatedRenderChildNodes);
             const reconciledRenderChildNodes = reconcileRenderNodeChildNodes({
                 newRenderTreeNodes: generatedRenderChildNodes,
                 oldRenderTreeNodes: renderNode.childNodes,
@@ -773,6 +639,91 @@ const generateViewTreeHelper = ({ renderNode, startingFromRenderNodeId, parentVi
             newNode.childNodes.push(viewNode);
             break;
         }
+        case "tag": {
+            const fullyComputedChildren = renderNode.internalMetadata.children.map((child) => {
+                if (child.kind === "empty-slot") {
+                    return {
+                        renderNode: { kind: "empty-slot", parent: renderNode },
+                        viewNode: {
+                            kind: "empty-slot",
+                            id: crypto.randomUUID(),
+                            parent: newNode,
+                        },
+                    };
+                }
+                if (!currentTreeRef.renderTree?.root) {
+                    throw new Error("determine the invariant error type later");
+                }
+                const existingRenderTreeNode = findRenderNodeOrThrow((node) => {
+                    if (node.kind === "empty-slot") {
+                        return false;
+                    }
+                    if (node.internalMetadata.kind === "empty-slot") {
+                        return false;
+                    }
+                    return node.internalMetadata.id === child.id;
+                }, currentTreeRef.renderTree.root);
+                const parentRenderTreeNode = findRenderNodeOrThrow((node) => {
+                    if (node.kind === "empty-slot") {
+                        return false;
+                    }
+                    if (node.internalMetadata.kind === "empty-slot") {
+                        return false;
+                    }
+                    return node.id === startingFromRenderNodeId;
+                }, currentTreeRef.renderTree.root);
+                if (parentRenderTreeNode.kind === "empty-slot" ||
+                    parentRenderTreeNode.internalMetadata.kind === "empty-slot") {
+                    throw new Error("Invariant Error: Parent cannot be an empty slot");
+                }
+                const reRenderChild = () => {
+                    const viewNode = generateViewTreeHelper({
+                        renderNode: existingRenderTreeNode,
+                        startingFromRenderNodeId: startingFromRenderNodeId,
+                        parentViewNode: newNode,
+                    });
+                    return { viewNode, renderNode: existingRenderTreeNode };
+                };
+                if (!currentTreeRef.viewTree) {
+                    return reRenderChild();
+                }
+                if (existingRenderTreeNode.kind === "empty-slot") {
+                    return {
+                        viewNode: {
+                            kind: "empty-slot",
+                            id: crypto.randomUUID(),
+                            parent: newNode,
+                        },
+                        renderNode: existingRenderTreeNode,
+                    };
+                }
+                const computedNode = currentTreeRef.viewTree.root &&
+                    existingRenderTreeNode.computedViewTreeNodeId
+                    ? findViewNodeOrThrow((node) => node.id === existingRenderTreeNode.computedViewTreeNodeId, currentTreeRef.viewTree.root)
+                    : null;
+                if (!computedNode) {
+                    return reRenderChild();
+                }
+                const isChild = Utils.isChildOf({
+                    potentialChildId: child.id,
+                    potentialParentId: parentRenderTreeNode.internalMetadata.id,
+                });
+                const shouldReRender = existingRenderTreeNode.internalMetadata.kind === "empty-slot"
+                    ? false
+                    : isChild;
+                if (!shouldReRender) {
+                    return {
+                        viewNode: computedNode,
+                        renderNode: existingRenderTreeNode,
+                    };
+                }
+                return reRenderChild();
+            });
+            newNode.childNodes = fullyComputedChildren
+                .map(({ viewNode }) => viewNode)
+                .filter((viewNode) => viewNode !== null);
+            break;
+        }
     }
     return newNode;
 };
@@ -788,31 +739,28 @@ export const buildReactTrees = (rootComponentInternalMetadata) => {
             kind: "empty-slot",
             parent: null,
         }
-        : // this looks super weird, but we transform the root metadata into an implicit
-            // component that returns the provided internal metadata
-            {
-                kind: "real-element",
-                childNodes: [],
-                computedViewTreeNodeId: null,
-                hasRendered: false,
-                hooks: [],
-                id: crypto.randomUUID(),
-                indexPath: [],
-                internalMetadata: {
-                    component: {
-                        kind: "function",
-                        function: () => rootComponentInternalMetadata,
-                        name: "root",
-                    },
-                    children: [],
-                    id: crypto.randomUUID(),
-                    kind: "real-element",
-                    props: null,
-                    provider: null,
-                    // parent: null
+        : {
+            kind: "real-element",
+            childNodes: [],
+            computedViewTreeNodeId: null,
+            hasRendered: false,
+            hooks: [],
+            id: crypto.randomUUID(),
+            indexPath: [],
+            internalMetadata: {
+                component: {
+                    kind: "function",
+                    function: () => rootComponentInternalMetadata,
+                    name: "root",
                 },
-                parent: null,
-            };
+                children: [],
+                id: crypto.randomUUID(),
+                kind: "real-element",
+                props: null,
+                provider: null,
+            },
+            parent: null,
+        };
     currentTreeRef.renderTree = {
         root: rootRenderTreeNode,
         currentLastRenderChildNodes: [],
